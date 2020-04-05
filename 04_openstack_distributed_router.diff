@@ -1,0 +1,51 @@
+diff --git a/data/data/openstack/main.tf b/data/data/openstack/main.tf
+index 99a89d7b1..00a8ffdd6 100644
+--- a/data/data/openstack/main.tf
++++ b/data/data/openstack/main.tf
+@@ -76,6 +76,7 @@ module "topology" {
+   external_dns        = var.openstack_external_dns
+   trunk_support       = var.openstack_trunk_support
+   octavia_support     = var.openstack_octavia_support
++  distributed_router = var.openstack_distributed_router
+ }
+ 
+ resource "openstack_images_image_v2" "base_image" {
+diff --git a/data/data/openstack/topology/private-network.tf b/data/data/openstack/topology/private-network.tf
+index 4de41673c..1d2d187c5 100644
+--- a/data/data/openstack/topology/private-network.tf
++++ b/data/data/openstack/topology/private-network.tf
+@@ -132,6 +132,7 @@ resource "openstack_networking_router_v2" "openshift-external-router" {
+   external_network_id     = data.openstack_networking_network_v2.external_network.id
+   tags                    = ["openshiftClusterID=${var.cluster_id}"]
+   availability_zone_hints = ["${var.availability_zone}"]
++  distributed             = var.distributed_router
+ }
+ 
+ resource "openstack_networking_router_interface_v2" "nodes_router_interface" {
+diff --git a/data/data/openstack/topology/variables.tf b/data/data/openstack/topology/variables.tf
+index 4bb6ffd57..f0fce1eb7 100644
+--- a/data/data/openstack/topology/variables.tf
++++ b/data/data/openstack/topology/variables.tf
+@@ -61,3 +61,8 @@ variable "availability_zone" {
+   type        = string
+   description = "Name of availability zone to deploy cluster to."
+ }
++
++variable "distributed_router" {
++  type        = bool
++  description = "Indicates whether or not to create a distributed router."
++}
+diff --git a/data/data/openstack/variables-openstack.tf b/data/data/openstack/variables-openstack.tf
+index 2e257d3c8..a1665431a 100644
+--- a/data/data/openstack/variables-openstack.tf
++++ b/data/data/openstack/variables-openstack.tf
+@@ -340,3 +340,9 @@ variable "openstack_availability_zone" {
+   type        = string
+   description = "Name of availability zone to deploy cluster to."
+ }
++
++variable "openstack_distributed_router" {
++  type        = bool
++  default     = true
++  description = "Indicates whether or not to create a distributed router."
++}

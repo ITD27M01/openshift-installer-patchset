@@ -1,0 +1,20 @@
+diff --git a/data/data/openstack/topology/private-network.tf b/data/data/openstack/topology/private-network.tf
+index dd2c22e76..4304e8582 100644
+--- a/data/data/openstack/topology/private-network.tf
++++ b/data/data/openstack/topology/private-network.tf
+@@ -128,10 +128,11 @@ resource "openstack_networking_floatingip_associate_v2" "api_fip" {
+ }
+ 
+ resource "openstack_networking_router_v2" "openshift-external-router" {
+-  name                = "${var.cluster_id}-external-router"
+-  admin_state_up      = true
+-  external_network_id = data.openstack_networking_network_v2.external_network.id
+-  tags                = ["openshiftClusterID=${var.cluster_id}"]
++  name                    = "${var.cluster_id}-external-router"
++  admin_state_up          = true
++  external_network_id     = data.openstack_networking_network_v2.external_network.id
++  tags                    = ["openshiftClusterID=${var.cluster_id}"]
++  availability_zone_hints = ["${var.availability_zone}"]
+ }
+ 
+ resource "openstack_networking_router_interface_v2" "nodes_router_interface" {

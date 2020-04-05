@@ -1,0 +1,51 @@
+diff --git a/data/data/openstack/main.tf b/data/data/openstack/main.tf
+index 99a89d7b1..56070d489 100644
+--- a/data/data/openstack/main.tf
++++ b/data/data/openstack/main.tf
+@@ -76,6 +76,7 @@ module "topology" {
+   external_dns        = var.openstack_external_dns
+   trunk_support       = var.openstack_trunk_support
+   octavia_support     = var.openstack_octavia_support
++  private_network_mtu = var.openstack_private_network_mtu
+ }
+ 
+ resource "openstack_images_image_v2" "base_image" {
+diff --git a/data/data/openstack/topology/private-network.tf b/data/data/openstack/topology/private-network.tf
+index 9c7f12aa7..dd2c22e76 100644
+--- a/data/data/openstack/topology/private-network.tf
++++ b/data/data/openstack/topology/private-network.tf
+@@ -13,6 +13,7 @@ resource "openstack_networking_network_v2" "openshift-private" {
+   admin_state_up          = "true"
+   tags                    = ["openshiftClusterID=${var.cluster_id}"]
+   availability_zone_hints =  ["${var.availability_zone}"]
++  mtu                     = var.private_network_mtu
+ }
+ 
+ resource "openstack_networking_subnet_v2" "nodes" {
+diff --git a/data/data/openstack/topology/variables.tf b/data/data/openstack/topology/variables.tf
+index 4bb6ffd57..b51e18059 100644
+--- a/data/data/openstack/topology/variables.tf
++++ b/data/data/openstack/topology/variables.tf
+@@ -61,3 +61,7 @@ variable "availability_zone" {
+   type        = string
+   description = "Name of availability zone to deploy cluster to."
+ }
++
++variable "private_network_mtu" {
++  type = string
++}
+\ No newline at end of file
+diff --git a/data/data/openstack/variables-openstack.tf b/data/data/openstack/variables-openstack.tf
+index 2e257d3c8..c2ca7ae3d 100644
+--- a/data/data/openstack/variables-openstack.tf
++++ b/data/data/openstack/variables-openstack.tf
+@@ -340,3 +340,9 @@ variable "openstack_availability_zone" {
+   type        = string
+   description = "Name of availability zone to deploy cluster to."
+ }
++
++variable "openstack_private_network_mtu" {
++  type        = string
++  default     = "1500"
++  description = "Mtu size for private network."
++}
