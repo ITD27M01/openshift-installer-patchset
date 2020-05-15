@@ -1,0 +1,52 @@
+From 70b5059f11d06be182a062d887e3981dd2cebe86 Mon Sep 17 00:00:00 2001
+From: ITD27M01 <igortiunov@gmail.com>
+Date: Fri, 15 May 2020 19:15:21 +0300
+Subject: [PATCH] Availability zone support for network
+
+---
+ data/data/openstack/main.tf                     | 1 +
+ data/data/openstack/topology/private-network.tf | 2 ++
+ data/data/openstack/topology/variables.tf       | 5 +++++
+ 3 files changed, 8 insertions(+)
+
+diff --git a/data/data/openstack/main.tf b/data/data/openstack/main.tf
+index 7754ef2eb..96d7ed64e 100644
+--- a/data/data/openstack/main.tf
++++ b/data/data/openstack/main.tf
+@@ -68,6 +68,7 @@ module "topology" {
+   cidr_block          = var.machine_v4_cidrs[0]
+   cluster_id          = var.cluster_id
+   cluster_domain      = var.cluster_domain
++  availability_zone   = var.openstack_availability_zone
+   external_network    = var.openstack_external_network
+   external_network_id = var.openstack_external_network_id
+   masters_count       = var.master_count
+diff --git a/data/data/openstack/topology/private-network.tf b/data/data/openstack/topology/private-network.tf
+index a726a3e1f..b3aaa8414 100644
+--- a/data/data/openstack/topology/private-network.tf
++++ b/data/data/openstack/topology/private-network.tf
+@@ -12,6 +12,8 @@ resource "openstack_networking_network_v2" "openshift-private" {
+   name           = "${var.cluster_id}-openshift"
+   admin_state_up = "true"
+   tags           = ["openshiftClusterID=${var.cluster_id}"]
++
++  availability_zone_hints =  ["${var.availability_zone}"]
+ }
+ 
+ resource "openstack_networking_subnet_v2" "nodes" {
+diff --git a/data/data/openstack/topology/variables.tf b/data/data/openstack/topology/variables.tf
+index 267da9cc7..4bb6ffd57 100644
+--- a/data/data/openstack/topology/variables.tf
++++ b/data/data/openstack/topology/variables.tf
+@@ -56,3 +56,8 @@ variable "trunk_support" {
+ variable "octavia_support" {
+   type = "string"
+ }
++
++variable "availability_zone" {
++  type        = string
++  description = "Name of availability zone to deploy cluster to."
++}
+-- 
+2.26.2
+

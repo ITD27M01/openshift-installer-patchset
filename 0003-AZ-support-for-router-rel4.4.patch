@@ -1,0 +1,25 @@
+From b94bb39ed78713bc56f0f9f0cd1262425c1d2fe1 Mon Sep 17 00:00:00 2001
+From: ITD27M01 <igortiunov@gmail.com>
+Date: Fri, 15 May 2020 19:21:32 +0300
+Subject: [PATCH] Availability zone for router in the case of dvr
+
+---
+ data/data/openstack/topology/private-network.tf | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/data/data/openstack/topology/private-network.tf b/data/data/openstack/topology/private-network.tf
+index b3aaa8414..e6e3d98af 100644
+--- a/data/data/openstack/topology/private-network.tf
++++ b/data/data/openstack/topology/private-network.tf
+@@ -132,6 +132,8 @@ resource "openstack_networking_router_v2" "openshift-external-router" {
+   admin_state_up      = true
+   external_network_id = data.openstack_networking_network_v2.external_network.id
+   tags                = ["openshiftClusterID=${var.cluster_id}"]
++
++  availability_zone_hints =  ["${var.availability_zone}"]
+ }
+ 
+ resource "openstack_networking_router_interface_v2" "nodes_router_interface" {
+-- 
+2.26.2
+
