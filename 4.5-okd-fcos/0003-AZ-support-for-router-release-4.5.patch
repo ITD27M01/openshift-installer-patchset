@@ -1,0 +1,25 @@
+From 4d0a8f8cdfd9258ae3c5c716c7d0429c131d92fb Mon Sep 17 00:00:00 2001
+From: ITD27M01 <igortiunov@gmail.com>
+Date: Mon, 3 Aug 2020 23:23:46 +0400
+Subject: [PATCH] AZ-support-for-router-rel4.5
+
+---
+ data/data/openstack/topology/private-network.tf | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/data/data/openstack/topology/private-network.tf b/data/data/openstack/topology/private-network.tf
+index a7470868a..759e8f020 100644
+--- a/data/data/openstack/topology/private-network.tf
++++ b/data/data/openstack/topology/private-network.tf
+@@ -139,6 +139,8 @@ resource "openstack_networking_router_v2" "openshift-external-router" {
+   admin_state_up      = true
+   external_network_id = data.openstack_networking_network_v2.external_network.id
+   tags                = ["openshiftClusterID=${var.cluster_id}"]
++
++  availability_zone_hints =  ["${var.availability_zone}"]
+ }
+ 
+ resource "openstack_networking_router_interface_v2" "nodes_router_interface" {
+-- 
+2.24.1
+

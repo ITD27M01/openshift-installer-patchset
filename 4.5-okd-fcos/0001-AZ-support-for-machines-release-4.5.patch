@@ -1,0 +1,341 @@
+From b96a53b1a0bf50cd7e3340f04cc7da940fd64961 Mon Sep 17 00:00:00 2001
+From: ITD27M01 <igortiunov@gmail.com>
+Date: Tue, 4 Aug 2020 18:37:20 +0400
+Subject: [PATCH] AZ-support-for-machines-fcos
+
+---
+ data/data/openstack/bootstrap/main.tf         |  2 +
+ data/data/openstack/bootstrap/variables.tf    |  5 +++
+ data/data/openstack/main.tf                   |  3 ++
+ data/data/openstack/masters/main.tf           |  2 +
+ data/data/openstack/masters/variables.tf      |  5 +++
+ data/data/openstack/variables-openstack.tf    |  5 +++
+ pkg/asset/cluster/tfvars.go                   |  1 +
+ .../installconfig/openstack/openstack.go      | 40 ++++++++++++++++---
+ .../openstack/realvalidvaluesfetcher.go       | 31 ++++++++++++++
+ pkg/asset/machines/openstack/machines.go      |  2 +-
+ pkg/asset/machines/openstack/machinesets.go   |  2 +-
+ pkg/tfvars/openstack/openstack.go             |  4 +-
+ pkg/types/openstack/machinepool.go            |  3 ++
+ pkg/types/openstack/platform.go               |  3 ++
+ pkg/types/openstack/validation/platform.go    |  6 +++
+ .../validation/validvaluesfetcher.go          |  2 +
+ 16 files changed, 107 insertions(+), 9 deletions(-)
+
+diff --git a/data/data/openstack/bootstrap/main.tf b/data/data/openstack/bootstrap/main.tf
+index 2de72429f..56d457338 100644
+--- a/data/data/openstack/bootstrap/main.tf
++++ b/data/data/openstack/bootstrap/main.tf
+@@ -44,6 +44,8 @@ resource "openstack_compute_instance_v2" "bootstrap" {
+   flavor_id = data.openstack_compute_flavor_v2.bootstrap_flavor.id
+   image_id  = var.root_volume_size == null ? var.base_image_id : null
+ 
++  availability_zone = var.availability_zone
++
+   user_data = var.bootstrap_shim_ignition
+ 
+   dynamic block_device {
+diff --git a/data/data/openstack/bootstrap/variables.tf b/data/data/openstack/bootstrap/variables.tf
+index b0750ee83..1ae900776 100644
+--- a/data/data/openstack/bootstrap/variables.tf
++++ b/data/data/openstack/bootstrap/variables.tf
+@@ -76,3 +76,8 @@ variable "root_volume_type" {
+   type = string
+   description = "The type of volume for the root block device."
+ }
++
++variable "availability_zone" {
++  type        = string
++  description = "Name of availability zone to deploy cluster to."
++}
+diff --git a/data/data/openstack/main.tf b/data/data/openstack/main.tf
+index 508031c3a..9fbd2b149 100644
+--- a/data/data/openstack/main.tf
++++ b/data/data/openstack/main.tf
+@@ -33,6 +33,7 @@ module "bootstrap" {
+   api_int_ip              = var.openstack_api_int_ip
+   node_dns_ip             = var.openstack_node_dns_ip
+   external_network        = var.openstack_external_network
++  availability_zone       = var.openstack_availability_zone
+   cluster_domain          = var.cluster_domain
+   nodes_subnet_id         = module.topology.nodes_subnet_id
+   private_network_id      = module.topology.private_network_id
+@@ -46,6 +47,8 @@ module "bootstrap" {
+ module "masters" {
+   source = "./masters"
+ 
++  availability_zone       = var.openstack_availability_zone
++
+   base_image_id   = data.openstack_images_image_v2.base_image.id
+   cluster_id      = var.cluster_id
+   flavor_name     = var.openstack_master_flavor_name
+diff --git a/data/data/openstack/masters/main.tf b/data/data/openstack/masters/main.tf
+index 31382d4cc..2ba2a41b0 100644
+--- a/data/data/openstack/masters/main.tf
++++ b/data/data/openstack/masters/main.tf
+@@ -44,6 +44,8 @@ resource "openstack_compute_instance_v2" "master_conf" {
+   name = "${var.cluster_id}-master-${count.index}"
+   count = var.instance_count
+ 
++  availability_zone       = var.availability_zone
++
+   flavor_id = data.openstack_compute_flavor_v2.masters_flavor.id
+   image_id = var.root_volume_size == null ? var.base_image_id : null
+   security_groups = var.master_sg_ids
+diff --git a/data/data/openstack/masters/variables.tf b/data/data/openstack/masters/variables.tf
+index 71128914e..e22f3f938 100644
+--- a/data/data/openstack/masters/variables.tf
++++ b/data/data/openstack/masters/variables.tf
+@@ -50,3 +50,8 @@ variable "additional_network_ids" {
+   type        = list(string)
+   description = "IDs of additional networks for master nodes."
+ }
++
++variable "availability_zone" {
++  type        = string
++  description = "Name of availability zone to deploy cluster to."
++}
+\ No newline at end of file
+diff --git a/data/data/openstack/variables-openstack.tf b/data/data/openstack/variables-openstack.tf
+index 86e798b25..adefe8653 100644
+--- a/data/data/openstack/variables-openstack.tf
++++ b/data/data/openstack/variables-openstack.tf
+@@ -352,3 +352,8 @@ variable "openstack_machines_network_id" {
+   default     = ""
+   description = "ID of the network the machines subnet is on. If empty, the installer will create a network to use as machinesNetwork."
+ }
++
++variable "openstack_availability_zone" {
++  type        = string
++  description = "Name of availability zone to deploy cluster to."
++}
+\ No newline at end of file
+diff --git a/pkg/asset/cluster/tfvars.go b/pkg/asset/cluster/tfvars.go
+index 44c7059db..6517ff15f 100644
+--- a/pkg/asset/cluster/tfvars.go
++++ b/pkg/asset/cluster/tfvars.go
+@@ -374,6 +374,7 @@ func (t *TerraformVariables) Generate(parents asset.Parents) error {
+ 		data, err = openstacktfvars.TFVars(
+ 			masters[0].Spec.ProviderSpec.Value.Object.(*openstackprovider.OpenstackProviderSpec),
+ 			installConfig.Config.Platform.OpenStack.Cloud,
++			installConfig.Config.Platform.OpenStack.AvailabilityZone,
+ 			installConfig.Config.Platform.OpenStack.ExternalNetwork,
+ 			installConfig.Config.Platform.OpenStack.ExternalDNS,
+ 			installConfig.Config.Platform.OpenStack.LbFloatingIP,
+diff --git a/pkg/asset/installconfig/openstack/openstack.go b/pkg/asset/installconfig/openstack/openstack.go
+index f7d1c3d44..1b557883d 100644
+--- a/pkg/asset/installconfig/openstack/openstack.go
++++ b/pkg/asset/installconfig/openstack/openstack.go
+@@ -44,6 +44,33 @@ func Platform() (*openstack.Platform, error) {
+ 		return nil, err
+ 	}
+ 
++	availabilityZoneNames, err := validValuesFetcher.GetAvailabilityZoneNames(cloud)
++	if err != nil {
++		return nil, err
++	}
++	sort.Strings(availabilityZoneNames)
++	var availabilityZone string
++	err = survey.Ask([]*survey.Question{
++			{
++				Prompt: &survey.Select{
++					Message: "AvailabilityZone",
++					Help:    "The OpenStack availability zone to be used for control-plane and compute nodes.",
++					Options: availabilityZoneNames,
++				},
++				Validate: survey.ComposeValidators(survey.Required, func(ans interface{}) error {
++					value := ans.(string)
++					i := sort.SearchStrings(availabilityZoneNames, value)
++					if i == len(availabilityZoneNames) || availabilityZoneNames[i] != value {
++						return errors.Errorf("invalid availability zone name %q, should be one of %+v", value, strings.Join(availabilityZoneNames, ", "))
++					}
++					return nil
++				}),
++			},
++		}, &availabilityZone)
++	if err != nil {
++		return nil, err
++	}
++
+ 	networkNames, err := validValuesFetcher.GetNetworkNames(cloud)
+ 	if err != nil {
+ 		return nil, err
+@@ -151,11 +178,12 @@ func Platform() (*openstack.Platform, error) {
+ 	}
+ 
+ 	return &openstack.Platform{
+-		Cloud:           cloud,
+-		ExternalNetwork: extNet,
+-		FlavorName:      flavor,
+-		LbFloatingIP:    lbFloatingIP,
+-		TrunkSupport:    trunkSupport,
+-		OctaviaSupport:  octaviaSupport,
++		Cloud:            cloud,
++		AvailabilityZone: availabilityZone,
++		ExternalNetwork:  extNet,
++		FlavorName:       flavor,
++		LbFloatingIP:     lbFloatingIP,
++		TrunkSupport:     trunkSupport,
++		OctaviaSupport:   octaviaSupport,
+ 	}, nil
+ }
+diff --git a/pkg/asset/installconfig/openstack/realvalidvaluesfetcher.go b/pkg/asset/installconfig/openstack/realvalidvaluesfetcher.go
+index 7e9916175..a79ef1dc8 100644
+--- a/pkg/asset/installconfig/openstack/realvalidvaluesfetcher.go
++++ b/pkg/asset/installconfig/openstack/realvalidvaluesfetcher.go
+@@ -5,6 +5,7 @@ import (
+ 
+ 	"github.com/gophercloud/gophercloud/openstack/common/extensions"
+ 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
++	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
+ 	"github.com/gophercloud/gophercloud/openstack/identity/v3/tokens"
+ 	netext "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions"
+ 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/floatingips"
+@@ -38,6 +39,36 @@ func (f realValidValuesFetcher) GetCloudNames() ([]string, error) {
+ 	return cloudNames, nil
+ }
+ 
++// GetAvailabilityZoneNames gets a list of valid availability zone names.
++func (f realValidValuesFetcher) GetAvailabilityZoneNames(cloud string) ([]string, error) {
++	opts := defaultClientOpts(cloud)
++
++	conn, err := clientconfig.NewServiceClient("compute", opts)
++	if err != nil {
++		return nil, err
++	}
++
++	allPages, err := availabilityzones.List(conn).AllPages()
++	if err != nil {
++		return nil, err
++	}
++
++	allAvailabilityZones, err := availabilityzones.ExtractAvailabilityZones(allPages)
++	if err != nil {
++		return nil, err
++	}
++	
++	if len(allAvailabilityZones) == 0 {
++		return nil, errors.New("no OpenStack availability zones were found")
++	}
++
++	availabilityZoneNames := make([]string, len(allAvailabilityZones))
++	for i, availabilityZone := range allAvailabilityZones {
++			availabilityZoneNames[i] = availabilityZone.ZoneName
++	}
++	return availabilityZoneNames, nil
++}
++
+ // GetNetworkNames gets the valid network names.
+ func (f realValidValuesFetcher) GetNetworkNames(cloud string) ([]string, error) {
+ 	opts := defaultClientOpts(cloud)
+diff --git a/pkg/asset/machines/openstack/machines.go b/pkg/asset/machines/openstack/machines.go
+index 6d3f81d90..d90f8dfc0 100644
+--- a/pkg/asset/machines/openstack/machines.go
++++ b/pkg/asset/machines/openstack/machines.go
+@@ -36,7 +36,7 @@ func Machines(clusterID string, config *types.InstallConfig, pool *types.Machine
+ 	}
+ 	platform := config.Platform.OpenStack
+ 
+-	az := ""
++	az := config.Platform.OpenStack.AvailabilityZone
+ 	trunk := platform.TrunkSupport
+ 
+ 	provider := generateProvider(clusterID, platform, pool.Platform.OpenStack, osImage, az, role, userDataSecret, trunk)
+diff --git a/pkg/asset/machines/openstack/machinesets.go b/pkg/asset/machines/openstack/machinesets.go
+index f598bdfac..f49c4ce1b 100644
+--- a/pkg/asset/machines/openstack/machinesets.go
++++ b/pkg/asset/machines/openstack/machinesets.go
+@@ -30,7 +30,7 @@ func MachineSets(clusterID string, config *types.InstallConfig, pool *types.Mach
+ 
+ 	// TODO(flaper87): Add support for availability zones
+ 	machinesets := make([]*clusterapi.MachineSet, 0, 1)
+-	az := ""
++	az := config.Platform.OpenStack.AvailabilityZone
+ 	trunk := config.Platform.OpenStack.TrunkSupport
+ 
+ 	provider := generateProvider(clusterID, platform, mpool, osImage, az, role, userDataSecret, trunk)
+diff --git a/pkg/tfvars/openstack/openstack.go b/pkg/tfvars/openstack/openstack.go
+index 5b82c5a36..e59e14339 100644
+--- a/pkg/tfvars/openstack/openstack.go
++++ b/pkg/tfvars/openstack/openstack.go
+@@ -25,6 +25,7 @@ import (
+ 
+ type config struct {
+ 	BaseImageName              string   `json:"openstack_base_image_name,omitempty"`
++	AvailabilityZone       	   string   `json:"openstack_availability_zone,omitempty"`
+ 	ExternalNetwork            string   `json:"openstack_external_network,omitempty"`
+ 	Cloud                      string   `json:"openstack_credentials_cloud,omitempty"`
+ 	FlavorName                 string   `json:"openstack_master_flavor_name,omitempty"`
+@@ -46,9 +47,10 @@ type config struct {
+ }
+ 
+ // TFVars generates OpenStack-specific Terraform variables.
+-func TFVars(masterConfig *v1alpha1.OpenstackProviderSpec, cloud string, externalNetwork string, externalDNS []string, lbFloatingIP string, apiVIP string, dnsVIP string, ingressVIP string, trunkSupport string, octaviaSupport string, baseImage string, infraID string, userCA string, bootstrapIgn string, mpool *types_openstack.MachinePool, machinesSubnet string) ([]byte, error) {
++func TFVars(masterConfig *v1alpha1.OpenstackProviderSpec, cloud string, availabilityZone string, externalNetwork string, externalDNS []string, lbFloatingIP string, apiVIP string, dnsVIP string, ingressVIP string, trunkSupport string, octaviaSupport string, baseImage string, infraID string, userCA string, bootstrapIgn string, mpool *types_openstack.MachinePool, machinesSubnet string) ([]byte, error) {
+ 
+ 	cfg := &config{
++		AvailabilityZone: availabilityZone,
+ 		ExternalNetwork: externalNetwork,
+ 		Cloud:           cloud,
+ 		FlavorName:      masterConfig.Flavor,
+diff --git a/pkg/types/openstack/machinepool.go b/pkg/types/openstack/machinepool.go
+index 89d93d358..1ae1781d7 100644
+--- a/pkg/types/openstack/machinepool.go
++++ b/pkg/types/openstack/machinepool.go
+@@ -7,6 +7,9 @@ type MachinePool struct {
+ 	// eg. m1.large
+ 	FlavorName string `json:"type"`
+ 
++	// AvailabilityZone defines the OpenStack Nova AvailabilityZone.
++	// eg. nova
++	AvailabilityZone string `json:"availabilityZone,omitempty"`
+ 	// RootVolume defines the root volume for instances in the machine pool.
+ 	// The instances use ephemeral disks if not set.
+ 	// +optional
+diff --git a/pkg/types/openstack/platform.go b/pkg/types/openstack/platform.go
+index f4145dc2a..77d29f066 100644
+--- a/pkg/types/openstack/platform.go
++++ b/pkg/types/openstack/platform.go
+@@ -7,6 +7,9 @@ type Platform struct {
+ 	// Deprecated: this value is not used by the installer.
+ 	Region string `json:"region"`
+ 
++	// AvailabilityZone specifies the OpenStack availability zone where the cluster will be created.
++	AvailabilityZone string `json:"availabilityZone,omitempty"`
++
+ 	// DefaultMachinePlatform is the default configuration used when
+ 	// installing on OpenStack for machine pools which do not define their own
+ 	// platform configuration.
+diff --git a/pkg/types/openstack/validation/platform.go b/pkg/types/openstack/validation/platform.go
+index e2f3e2dc6..94287bb7e 100644
+--- a/pkg/types/openstack/validation/platform.go
++++ b/pkg/types/openstack/validation/platform.go
+@@ -38,6 +38,12 @@ func ValidatePlatform(p *openstack.Platform, n *types.Networking, fldPath *field
+ 				}
+ 			}
+ 		}
++		validAvailabilityZones, err := fetcher.GetAvailabilityZoneNames(p.Cloud)
++		if err != nil {
++			allErrs = append(allErrs, field.InternalError(fldPath.Child("availabilityZone"), errors.New("could not retrieve valid availability zones")))
++		} else if !isValidValue(p.AvailabilityZone, validAvailabilityZones) {
++			allErrs = append(allErrs, field.NotSupported(fldPath.Child("availabilityZone"), p.AvailabilityZone, validAvailabilityZones))
++		}
+ 		validNetworks, err := fetcher.GetNetworkNames(p.Cloud)
+ 		if err != nil {
+ 			allErrs = append(allErrs, field.InternalError(fldPath.Child("externalNetwork"), errors.New("could not retrieve valid networks")))
+diff --git a/pkg/types/openstack/validation/validvaluesfetcher.go b/pkg/types/openstack/validation/validvaluesfetcher.go
+index 8fe7ebb40..556a9098e 100644
+--- a/pkg/types/openstack/validation/validvaluesfetcher.go
++++ b/pkg/types/openstack/validation/validvaluesfetcher.go
+@@ -6,6 +6,8 @@ package validation
+ type ValidValuesFetcher interface {
+ 	// GetCloudNames gets the valid cloud names.
+ 	GetCloudNames() ([]string, error)
++	// GetAvailabilityZoneNames gets the valid availability zone names.
++	GetAvailabilityZoneNames(cloud string) ([]string, error)
+ 	// GetNetworkNames gets the valid network names.
+ 	GetNetworkNames(cloud string) ([]string, error)
+ 	// GetFlavorNames gets the valid flavor names.
+-- 
+2.24.1
+

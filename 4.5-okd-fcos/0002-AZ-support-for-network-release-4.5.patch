@@ -1,0 +1,53 @@
+From 2fe347150cdfd5f32540a6a9f33ffec125fcc3f5 Mon Sep 17 00:00:00 2001
+From: ITD27M01 <igortiunov@gmail.com>
+Date: Mon, 3 Aug 2020 23:21:25 +0400
+Subject: [PATCH] AZ-support-for-network-rel4.5
+
+---
+ data/data/openstack/main.tf                     | 1 +
+ data/data/openstack/topology/private-network.tf | 2 ++
+ data/data/openstack/topology/variables.tf       | 5 +++++
+ 3 files changed, 8 insertions(+)
+
+diff --git a/data/data/openstack/main.tf b/data/data/openstack/main.tf
+index 9fbd2b149..f40f9fa73 100644
+--- a/data/data/openstack/main.tf
++++ b/data/data/openstack/main.tf
+@@ -71,6 +71,7 @@ module "topology" {
+   cidr_block          = var.machine_v4_cidrs[0]
+   cluster_id          = var.cluster_id
+   cluster_domain      = var.cluster_domain
++  availability_zone   = var.openstack_availability_zone
+   external_network    = var.openstack_external_network
+   external_network_id = var.openstack_external_network_id
+   masters_count       = var.master_count
+diff --git a/data/data/openstack/topology/private-network.tf b/data/data/openstack/topology/private-network.tf
+index e2c664a49..a7470868a 100644
+--- a/data/data/openstack/topology/private-network.tf
++++ b/data/data/openstack/topology/private-network.tf
+@@ -16,6 +16,8 @@ resource "openstack_networking_network_v2" "openshift-private" {
+   name           = "${var.cluster_id}-openshift"
+   admin_state_up = "true"
+   tags           = ["openshiftClusterID=${var.cluster_id}", "${var.cluster_id}-primaryClusterNetwork"]
++
++  availability_zone_hints =  ["${var.availability_zone}"]
+ }
+ 
+ resource "openstack_networking_subnet_v2" "nodes" {
+diff --git a/data/data/openstack/topology/variables.tf b/data/data/openstack/topology/variables.tf
+index ba3e21ab3..354400b88 100644
+--- a/data/data/openstack/topology/variables.tf
++++ b/data/data/openstack/topology/variables.tf
+@@ -66,3 +66,8 @@ variable "machines_network_id" {
+   type    = string
+   default = ""
+ }
++
++variable "availability_zone" {
++  type        = string
++  description = "Name of availability zone to deploy cluster to."
++}
+\ No newline at end of file
+-- 
+2.24.1
+
